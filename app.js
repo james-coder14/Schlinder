@@ -95,10 +95,11 @@ document.getElementById('signup-btn').addEventListener('click', async () => {
       city: '',
       about: '',
       interests: '',
+      lookingFor: 'Friends',
       gender: 'Man',
       showMe: 'Everyone',
-      minAge: 18,
-      maxAge: 29,
+      minAge: 15,
+      maxAge: 25,
       visible: true,
       photoURL: '',
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -178,11 +179,38 @@ tabs.forEach(tab => {
 // ============================================================
 
 async function loadUserProfile() {
-  const doc = await db.collection('users').doc(currentUser.uid).get();
+  const ref = db.collection('users').doc(currentUser.uid);
+  const doc = await ref.get();
   if (doc.exists) {
     userProfile = doc.data();
-    fillProfileForm(userProfile);
+  } else {
+    // Account exists in Auth but no Firestore doc yet — create one
+    userProfile = {
+      name: currentUser.displayName || '',
+      email: currentUser.email || '',
+      dob: '',
+      city: '',
+      about: '',
+      interests: '',
+      lookingFor: 'Friends',
+      lookingFor: 'Friends',
+      gender: 'Man',
+      showMe: 'Everyone',
+      minAge: 15,
+      maxAge: 25,
+      visible: true,
+      photoURL: '',
+      likes: [],
+      matches: [],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    try {
+      await ref.set(userProfile);
+    } catch (e) {
+      console.error('Could not create profile doc', e);
+    }
   }
+  fillProfileForm(userProfile);
 }
 
 function fillProfileForm(p) {
@@ -197,10 +225,12 @@ function fillProfileForm(p) {
   document.getElementById('profile-about').value = p.about || '';
   aboutCount.textContent = (p.about || '').length;
   document.getElementById('profile-interests').value = p.interests || '';
+  const lookingEl = document.getElementById('profile-lookingfor');
+  if (lookingEl) lookingEl.value = p.lookingFor || 'Friends';
   document.getElementById('profile-gender').value = p.gender || 'Man';
   document.getElementById('profile-showme').value = p.showMe || 'Everyone';
-  document.getElementById('profile-minage').value = p.minAge || 18;
-  document.getElementById('profile-maxage').value = p.maxAge || 29;
+  document.getElementById('profile-minage').value = p.minAge || 15;
+  document.getElementById('profile-maxage').value = p.maxAge || 25;
   document.getElementById('profile-visible').checked = p.visible !== false;
 
   if (p.photoURL) {
@@ -263,7 +293,7 @@ photoInput.addEventListener('change', async (e) => {
     profilePhoto.src = dataUrl;
     profilePhoto.classList.remove('hidden');
     photoPlaceholder.classList.add('hidden');
-    await db.collection('users').doc(currentUser.uid).update({ photoURL: dataUrl });
+    await db.collection('users').doc(currentUser.uid).set({ photoURL: dataUrl }, { merge: true });
     userProfile.photoURL = dataUrl;
     showToast('Photo updated!');
   } catch (err) {
@@ -279,10 +309,11 @@ profileForm.addEventListener('submit', async (e) => {
     city: document.getElementById('profile-city').value.trim(),
     about: document.getElementById('profile-about').value.trim(),
     interests: document.getElementById('profile-interests').value.trim(),
+    lookingFor: document.getElementById('profile-lookingfor')?.value || 'Friends',
     gender: document.getElementById('profile-gender').value,
     showMe: document.getElementById('profile-showme').value,
-    minAge: parseInt(document.getElementById('profile-minage').value) || 18,
-    maxAge: parseInt(document.getElementById('profile-maxage').value) || 99,
+    minAge: parseInt(document.getElementById('profile-minage').value) || 15,
+    maxAge: parseInt(document.getElementById('profile-maxage').value) || 25,
     visible: document.getElementById('profile-visible').checked
   };
 
@@ -292,10 +323,10 @@ profileForm.addEventListener('submit', async (e) => {
   }
 
   try {
-    await db.collection('users').doc(currentUser.uid).update(data);
+    // set + merge creates the doc if it doesn't exist (fixes "No document to update")
+    await db.collection('users').doc(currentUser.uid).set(data, { merge: true });
     userProfile = { ...userProfile, ...data };
     showToast('Profile saved! You can now start matching 🔥');
-    // Unlock the rest of the app
     loadDiscover();
     loadMatches();
   } catch (err) {
@@ -473,7 +504,7 @@ async function handleSwipe(liked) {
     const myLikes = userProfile.likes || [];
     if (!myLikes.includes(target.id)) {
       myLikes.push(target.id);
-      await db.collection('users').doc(currentUser.uid).update({ likes: myLikes });
+      await db.collection('users').doc(currentUser.uid).set({ likes: myLikes }, { merge: true });
       userProfile.likes = myLikes;
     }
 
@@ -487,17 +518,18 @@ async function handleSwipe(liked) {
       const myMatches = userProfile.matches || [];
       if (!myMatches.includes(target.id)) {
         myMatches.push(target.id);
-        await db.collection('users').doc(currentUser.uid).update({ matches: myMatches });
+        await db.collection('users').doc(currentUser.uid).set({ matches: myMatches }, { merge: true });
         userProfile.matches = myMatches;
       }
       const theirMatches = theirData.matches || [];
       if (!theirMatches.includes(currentUser.uid)) {
         theirMatches.push(currentUser.uid);
-        await db.collection('users').doc(target.id).update({ matches: theirMatches });
+        await db.collection('users').doc(target.id).set({ matches: theirMatches }, { merge: true });
       }
-      // Show match modal
+      // Show match modal + confetti
       document.getElementById('match-name').textContent = `You and ${target.name} liked each other!`;
       matchModal.classList.remove('hidden');
+      burstConfetti();
     }
   }
 
@@ -507,6 +539,22 @@ async function handleSwipe(liked) {
 document.getElementById('close-match').addEventListener('click', () => {
   matchModal.classList.add('hidden');
 });
+
+function burstConfetti() {
+  const box = document.getElementById('confetti');
+  if (!box) return;
+  box.innerHTML = '';
+  const emojis = ['🔥', '💕', '✨', '🎉', '💖', '⭐', '🥳'];
+  for (let i = 0; i < 18; i++) {
+    const span = document.createElement('span');
+    span.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    span.style.left = Math.random() * 100 + '%';
+    span.style.animationDelay = Math.random() * 0.4 + 's';
+    span.style.fontSize = 0.9 + Math.random() * 0.8 + 'rem';
+    box.appendChild(span);
+  }
+  setTimeout(() => { box.innerHTML = ''; }, 2500);
+}
 
 // ============================================================
 // MATCHES
@@ -605,4 +653,25 @@ function showToast(msg) {
 // Prevent default drag behavior on images
 document.addEventListener('dragstart', (e) => {
   if (e.target.tagName === 'IMG') e.preventDefault();
+});
+
+// Interest quick-add chips
+document.getElementById('interest-chips')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.chip');
+  if (!btn) return;
+  e.preventDefault();
+  const interest = btn.dataset.interest;
+  const input = document.getElementById('profile-interests');
+  let list = (input.value || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (list.includes(interest)) {
+    list = list.filter(i => i !== interest);
+    btn.classList.remove('active');
+  } else if (list.length < 6) {
+    list.push(interest);
+    btn.classList.add('active');
+  } else {
+    showToast('Max 6 interests');
+    return;
+  }
+  input.value = list.join(', ');
 });

@@ -125,7 +125,7 @@
               Change your photo
               <input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp" hidden />
             </label>
-            <p class="hint">JPG, PNG or WebP · up to 5 MB<br>Photos (stored privately)</p>
+            <p class="hint">JPG, PNG or WebP · kept small & free<br>Photos stored with your profile</p>
           </div>
         </div>
 
@@ -147,9 +147,27 @@
         <textarea id="profile-about" maxlength="500" rows="3" placeholder="A little bit of iconic, funny, and interesting"></textarea>
         <p class="char-count"><span id="about-count">0</span>/500</p>
 
+        <label>Looking for</label>
+        <select id="profile-lookingfor">
+          <option value="Friends">Friends</option>
+          <option value="Dating">Dating</option>
+          <option value="Hangouts">Hangouts</option>
+          <option value="Not sure">Not sure yet</option>
+        </select>
+
         <label>Interests</label>
         <input type="text" id="profile-interests" placeholder="Iced Coffee, Biking, Hanging with friends" />
-        <p class="hint">Up to 6 interests, separated by commas.</p>
+        <p class="hint">Up to 6 interests, separated by commas. Tap chips to add!</p>
+        <div class="interest-chips" id="interest-chips">
+          <button type="button" class="chip" data-interest="Gaming">🎮 Gaming</button>
+          <button type="button" class="chip" data-interest="Music">🎵 Music</button>
+          <button type="button" class="chip" data-interest="Sports">⚽ Sports</button>
+          <button type="button" class="chip" data-interest="Art">🎨 Art</button>
+          <button type="button" class="chip" data-interest="Coding">💻 Coding</button>
+          <button type="button" class="chip" data-interest="Memes">😂 Memes</button>
+          <button type="button" class="chip" data-interest="Food">🍔 Food</button>
+          <button type="button" class="chip" data-interest="Movies">🎬 Movies</button>
+        </div>
 
         <div class="preferences-box">
           <h3>Your discovery preferences</h3>
@@ -177,11 +195,11 @@
           <div class="pref-row">
             <div>
               <label>Minimum age</label>
-              <input type="number" id="profile-minage" min="18" max="99" value="18" />
+              <input type="number" id="profile-minage" min="13" max="99" value="15" />
             </div>
             <div>
               <label>Maximum age</label>
-              <input type="number" id="profile-maxage" min="18" max="99" value="29" />
+              <input type="number" id="profile-maxage" min="13" max="99" value="25" />
             </div>
           </div>
 
@@ -205,9 +223,11 @@
 
   <!-- MATCH MODAL -->
   <div id="match-modal" class="modal hidden">
-    <div class="modal-content">
+    <div class="modal-content match-celebration">
+      <div class="confetti" id="confetti"></div>
       <h2>It's a match! 🔥</h2>
       <p id="match-name"></p>
+      <p class="match-sub">You both liked each other — say hi!</p>
       <button id="close-match" class="btn primary">Keep swiping</button>
     </div>
   </div>
