@@ -121,8 +121,15 @@ auth.onAuthStateChanged(async (user) => {
     authScreen.classList.add('hidden');
     appScreen.classList.remove('hidden');
     await loadUserProfile();
-    loadDiscover();
-    loadMatches();
+
+    // Force new users to finish their profile first
+    if (!isProfileComplete(userProfile)) {
+      switchToTab('profile');
+      showToast('Finish setting up your profile to start matching!');
+    } else {
+      loadDiscover();
+      loadMatches();
+    }
   } else {
     currentUser = null;
     userProfile = null;
@@ -131,6 +138,19 @@ auth.onAuthStateChanged(async (user) => {
   }
 });
 
+function isProfileComplete(p) {
+  if (!p) return false;
+  return !!(p.name && p.dob && p.city);
+}
+
+function switchToTab(target) {
+  tabs.forEach(t => t.classList.remove('active'));
+  const tabBtn = document.querySelector(`.tab[data-tab="${target}"]`);
+  if (tabBtn) tabBtn.classList.add('active');
+  Object.values(tabContents).forEach(c => c.classList.add('hidden'));
+  if (tabContents[target]) tabContents[target].classList.remove('hidden');
+}
+
 // ============================================================
 // TABS
 // ============================================================
@@ -138,10 +158,15 @@ auth.onAuthStateChanged(async (user) => {
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
     const target = tab.dataset.tab;
-    tabs.forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    Object.values(tabContents).forEach(c => c.classList.add('hidden'));
-    tabContents[target].classList.remove('hidden');
+
+    // Block Discover & Matches until profile is complete
+    if ((target === 'discover' || target === 'matches') && !isProfileComplete(userProfile)) {
+      showToast('Please finish your profile first');
+      switchToTab('profile');
+      return;
+    }
+
+    switchToTab(target);
 
     if (target === 'matches') loadMatches();
     if (target === 'discover') loadDiscover();
@@ -163,7 +188,12 @@ async function loadUserProfile() {
 function fillProfileForm(p) {
   document.getElementById('profile-name').value = p.name || '';
   document.getElementById('profile-dob').value = p.dob || '';
-  document.getElementById('profile-city').value = p.city || '';
+  const citySelect = document.getElementById('profile-city');
+  if (p.city === 'WELOCK' || p.city === 'BARHEN') {
+    citySelect.value = p.city;
+  } else {
+    citySelect.selectedIndex = 0;
+  }
   document.getElementById('profile-about').value = p.about || '';
   aboutCount.textContent = (p.about || '').length;
   document.getElementById('profile-interests').value = p.interests || '';
@@ -226,15 +256,18 @@ profileForm.addEventListener('submit', async (e) => {
     visible: document.getElementById('profile-visible').checked
   };
 
-  if (!data.name) {
-    showToast('Name is required');
+  if (!data.name || !data.dob || !data.city) {
+    showToast('Please fill in name, date of birth, and city');
     return;
   }
 
   try {
     await db.collection('users').doc(currentUser.uid).update(data);
     userProfile = { ...userProfile, ...data };
-    showToast('Profile saved!');
+    showToast('Profile saved! You can now start matching 🔥');
+    // Unlock the rest of the app
+    loadDiscover();
+    loadMatches();
   } catch (err) {
     showToast('Error saving: ' + err.message);
   }
@@ -452,13 +485,22 @@ document.getElementById('close-match').addEventListener('click', () => {
 async function loadMatches() {
   matchesList.innerHTML = '';
   const matchIds = userProfile?.matches || [];
+  const badge = document.getElementById('match-count-badge');
 
   if (matchIds.length === 0) {
     noMatches.classList.remove('hidden');
+    if (badge) {
+      badge.classList.add('hidden');
+      badge.textContent = '0';
+    }
     return;
   }
 
   noMatches.classList.add('hidden');
+  if (badge) {
+    badge.textContent = matchIds.length;
+    badge.classList.remove('hidden');
+  }
 
   for (const id of matchIds) {
     try {
@@ -475,13 +517,44 @@ async function loadMatches() {
           <h4>${p.name || 'Someone'}${age ? ', ' + age : ''}</h4>
           <p>${p.city || 'Say hello!'}</p>
         </div>
+        <button class="say-hi-btn" data-name="${(p.name || 'them').replace(/"/g, '')}" data-id="${id}">Say hi 👋</button>
       `;
       matchesList.appendChild(item);
     } catch (e) {
       console.error(e);
     }
   }
+
+  // Wire up Say hi buttons
+  matchesList.querySelectorAll('.say-hi-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openMessageModal(btn.dataset.name, btn.dataset.id);
+    });
+  });
 }
+
+function openMessageModal(name, id) {
+  document.getElementById('message-to-name').textContent = `To ${name}`;
+  document.getElementById('message-text').value = '';
+  document.getElementById('message-modal').dataset.targetId = id;
+  document.getElementById('message-modal').classList.remove('hidden');
+}
+
+document.getElementById('close-message').addEventListener('click', () => {
+  document.getElementById('message-modal').classList.add('hidden');
+});
+
+document.getElementById('send-message-btn').addEventListener('click', () => {
+  const text = document.getElementById('message-text').value.trim();
+  if (!text) {
+    showToast('Type a message first');
+    return;
+  }
+  // Simple local "sent" for now (no real chat backend yet)
+  document.getElementById('message-modal').classList.add('hidden');
+  showToast('Message sent! 🔥');
+});
 
 // ============================================================
 // UTILS

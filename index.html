@@ -50,7 +50,6 @@
       <div class="logo-small">
         <span class="flame">🔥</span>
         <span>schlinder.</span>
-        <span class="badge-18">18+</span>
       </div>
       <div class="top-actions">
         <button class="icon-btn" id="menu-btn">⋯</button>
@@ -63,7 +62,7 @@
         <span class="tab-icon">◎</span> Discover
       </button>
       <button class="tab" data-tab="matches">
-        <span class="tab-icon">♡</span> Matches
+        <span class="tab-icon">♡</span> Matches <span id="match-count-badge" class="match-badge hidden">0</span>
       </button>
       <button class="tab" data-tab="profile">
         <span class="tab-icon">👤</span> My profile
@@ -135,10 +134,14 @@
 
         <label>Date of birth</label>
         <input type="date" id="profile-dob" required />
-        <p class="hint">Only your age is shown. 18+ only.</p>
+        <p class="hint">Only your age is shown to others.</p>
 
-        <label>City</label>
-        <input type="text" id="profile-city" maxlength="50" placeholder="Your city" />
+        <label>Select your City!</label>
+        <select id="profile-city" required>
+          <option value="" disabled selected>Select your City!</option>
+          <option value="WELOCK">WELOCK</option>
+          <option value="BARHEN">BARHEN</option>
+        </select>
 
         <label>About me</label>
         <textarea id="profile-about" maxlength="500" rows="3" placeholder="A little bit of iconic, funny, and interesting"></textarea>
@@ -190,7 +193,7 @@
 
         <label class="checkbox-label">
           <input type="checkbox" id="profile-confirm" required />
-          I am 18 or older. This profile and photo are of me, and I agree to show them to other adult members when discovery is on.
+          This profile and photo are of me, and I agree to show them to other members when discovery is on.
         </label>
 
         <button type="submit" class="btn primary full">Save changes →</button>
@@ -206,6 +209,17 @@
       <h2>It's a match! 🔥</h2>
       <p id="match-name"></p>
       <button id="close-match" class="btn primary">Keep swiping</button>
+    </div>
+  </div>
+
+  <!-- SIMPLE MESSAGE MODAL -->
+  <div id="message-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Say hello 👋</h2>
+      <p id="message-to-name" style="margin-bottom:0.75rem;color:#6b7280"></p>
+      <textarea id="message-text" rows="3" placeholder="Hey! I saw we matched..." maxlength="300" style="width:100%;padding:0.75rem;border:1.5px solid #e5e7eb;border-radius:12px;font-size:1rem;font-family:inherit;margin-bottom:1rem;resize:none;"></textarea>
+      <button id="send-message-btn" class="btn primary full">Send</button>
+      <button id="close-message" class="btn secondary full" style="margin-top:0.5rem">Cancel</button>
     </div>
   </div>
 

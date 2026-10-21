@@ -173,14 +173,19 @@ body {
   font-size: 1.3rem;
 }
 
-.badge-18 {
-  font-size: 0.65rem;
-  background: var(--pink-light);
-  color: var(--pink);
-  padding: 0.15rem 0.4rem;
+.match-badge {
+  background: var(--pink);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
   border-radius: 999px;
-  font-weight: 600;
-  margin-left: 0.3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  margin-left: 2px;
 }
 
 .icon-btn {
@@ -427,6 +432,11 @@ body {
   background: var(--light-gray);
 }
 
+.match-item .match-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .match-item .match-info h4 {
   font-size: 1.05rem;
   font-weight: 600;
@@ -435,6 +445,23 @@ body {
 .match-item .match-info p {
   font-size: 0.85rem;
   color: var(--gray);
+}
+
+.match-item .say-hi-btn {
+  background: var(--pink-light);
+  color: var(--pink);
+  border: none;
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.match-item .say-hi-btn:active {
+  transform: scale(0.96);
 }
 
 /* ========== PROFILE FORM ========== */
