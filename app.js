@@ -217,27 +217,57 @@ document.getElementById('profile-about').addEventListener('input', (e) => {
   aboutCount.textContent = e.target.value.length;
 });
 
+// Compress image to base64 so we don't need Firebase Storage (free Spark plan)
+function compressImage(file, maxWidth = 600, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width;
+        let h = img.height;
+        if (w > maxWidth) {
+          h = Math.round((h * maxWidth) / w);
+          w = maxWidth;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = ev.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 photoInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024) {
-    showToast('Photo must be under 5 MB');
+  if (file.size > 8 * 1024 * 1024) {
+    showToast('Photo must be under 8 MB');
     return;
   }
   try {
-    showToast('Uploading photo...');
-    const ref = storage.ref(`photos/${currentUser.uid}/${Date.now()}_${file.name}`);
-    await ref.put(file);
-    const url = await ref.getDownloadURL();
-    profilePhoto.src = url;
+    showToast('Saving photo...');
+    const dataUrl = await compressImage(file);
+    // Keep under Firestore 1MB doc limit
+    if (dataUrl.length > 900000) {
+      showToast('Photo still too large — try a smaller one');
+      return;
+    }
+    profilePhoto.src = dataUrl;
     profilePhoto.classList.remove('hidden');
     photoPlaceholder.classList.add('hidden');
-    // Save immediately
-    await db.collection('users').doc(currentUser.uid).update({ photoURL: url });
-    userProfile.photoURL = url;
+    await db.collection('users').doc(currentUser.uid).update({ photoURL: dataUrl });
+    userProfile.photoURL = dataUrl;
     showToast('Photo updated!');
   } catch (err) {
-    showToast('Upload failed: ' + err.message);
+    showToast('Photo failed: ' + (err.message || 'try again'));
   }
 });
 
