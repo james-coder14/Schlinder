@@ -1,24 +1,18 @@
 // ============================================================
-// FIREBASE CONFIG – REPLACE THESE VALUES WITH YOUR OWN
+// FIREBASE CONFIG – Your project: schlinder-bddd2
 // ============================================================
-// 1. Go to https://console.firebase.google.com
-// 2. Create a project (or use existing)
-// 3. Add a Web app → copy the config object
-// 4. Enable Authentication → Email/Password
-// 5. Create Firestore Database (start in test mode for demo)
-// 6. Enable Storage
-// 7. Paste your config below
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyA9tgukVDeF2WPaA8ccP-nX1Pmo6NDqaE8",
+  authDomain: "schlinder-bddd2.firebaseapp.com",
+  projectId: "schlinder-bddd2",
+  storageBucket: "schlinder-bddd2.firebasestorage.app",
+  messagingSenderId: "261440140081",
+  appId: "1:261440140081:web:8116d7ab1dbd804626f610",
+  measurementId: "G-MJ6V3YJDD8"
 };
 
-// Initialize Firebase
+// Initialize Firebase (compat SDK – matches the scripts in index.html)
 firebase.initializeApp(firebaseConfig);
 
 const auth = firebase.auth();
