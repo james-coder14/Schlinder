@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>schlinder.</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Firebase SDKs (compat for simplicity) -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+</head>
+<body>
+  <!-- AUTH SCREEN -->
+  <div id="auth-screen" class="screen">
+    <div class="auth-container">
+      <div class="logo">
+        <span class="flame">🔥</span>
+        <h1>schlinder.</h1>
+      </div>
+      <p class="tagline">A little curiosity goes a long way</p>
+
+      <div id="auth-forms">
+        <div id="login-form" class="auth-form">
+          <input type="email" id="login-email" placeholder="Email" autocomplete="email" />
+          <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
+          <button id="login-btn" class="btn primary">Log in</button>
+          <p class="switch-auth">New here? <a href="#" id="show-signup">Create account</a></p>
+        </div>
+
+        <div id="signup-form" class="auth-form hidden">
+          <input type="text" id="signup-name" placeholder="First name" maxlength="30" />
+          <input type="email" id="signup-email" placeholder="Email" autocomplete="email" />
+          <input type="password" id="signup-password" placeholder="Password (min 6)" autocomplete="new-password" />
+          <button id="signup-btn" class="btn primary">Sign up</button>
+          <p class="switch-auth">Already have an account? <a href="#" id="show-login">Log in</a></p>
+        </div>
+      </div>
+
+      <p id="auth-error" class="error-msg"></p>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="app-screen" class="screen hidden">
+    <!-- Top bar -->
+    <header class="top-bar">
+      <button class="icon-btn" id="back-btn" style="visibility:hidden">←</button>
+      <div class="logo-small">
+        <span class="flame">🔥</span>
+        <span>schlinder.</span>
+        <span class="badge-18">18+</span>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" id="menu-btn">⋯</button>
+      </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="discover">
+        <span class="tab-icon">◎</span> Discover
+      </button>
+      <button class="tab" data-tab="matches">
+        <span class="tab-icon">♡</span> Matches
+      </button>
+      <button class="tab" data-tab="profile">
+        <span class="tab-icon">👤</span> My profile
+      </button>
+    </nav>
+
+    <!-- DISCOVER -->
+    <section id="discover-tab" class="tab-content">
+      <p class="section-label">A LITTLE CURIOSITY GOES A LONG WAY</p>
+      <h2>Discover</h2>
+      <p class="subtitle">Find someone who feels like your kind of person.</p>
+
+      <div id="card-stack">
+        <!-- Cards injected here -->
+      </div>
+
+      <div id="no-more-cards" class="empty-state hidden">
+        <div class="empty-icon">♡</div>
+        <h3>You're all caught up.</h3>
+        <p>No more profiles match your preferences right now. Check back as other adults join.</p>
+        <button id="check-again-btn" class="btn secondary">↻ Check again</button>
+      </div>
+
+      <div class="swipe-actions hidden" id="swipe-actions">
+        <button id="dislike-btn" class="action-btn dislike">✕</button>
+        <button id="like-btn" class="action-btn like">♥</button>
+      </div>
+    </section>
+
+    <!-- MATCHES -->
+    <section id="matches-tab" class="tab-content hidden">
+      <p class="section-label">THE FEELING IS MUTUAL</p>
+      <h2>Your matches</h2>
+      <p class="subtitle">You both swiped right. Now comes the hello.</p>
+
+      <div id="matches-list">
+        <!-- Matches injected here -->
+      </div>
+
+      <div id="no-matches" class="empty-state">
+        <div class="empty-icon">♡</div>
+        <p>No matches yet. Keep swiping!</p>
+      </div>
+    </section>
+
+    <!-- PROFILE -->
+    <section id="profile-tab" class="tab-content hidden">
+      <p class="section-label">YOUR LITTLE CORNER</p>
+      <h2>My profile</h2>
+      <p class="subtitle">Be yourself. Keep your details and discovery preferences up to date.</p>
+
+      <form id="profile-form">
+        <div class="photo-upload">
+          <div class="photo-preview" id="photo-preview">
+            <img id="profile-photo" src="" alt="" class="hidden" />
+            <div class="photo-placeholder" id="photo-placeholder">📷</div>
+          </div>
+          <div class="photo-info">
+            <label class="change-photo-btn">
+              Change your photo
+              <input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp" hidden />
+            </label>
+            <p class="hint">JPG, PNG or WebP · up to 5 MB<br>Photos (stored privately)</p>
+          </div>
+        </div>
+
+        <label>First name</label>
+        <input type="text" id="profile-name" maxlength="30" required />
+
+        <label>Date of birth</label>
+        <input type="date" id="profile-dob" required />
+        <p class="hint">Only your age is shown. 18+ only.</p>
+
+        <label>City</label>
+        <input type="text" id="profile-city" maxlength="50" placeholder="Your city" />
+
+        <label>About me</label>
+        <textarea id="profile-about" maxlength="500" rows="3" placeholder="A little bit of iconic, funny, and interesting"></textarea>
+        <p class="char-count"><span id="about-count">0</span>/500</p>
+
+        <label>Interests</label>
+        <input type="text" id="profile-interests" placeholder="Iced Coffee, Biking, Hanging with friends" />
+        <p class="hint">Up to 6 interests, separated by commas.</p>
+
+        <div class="preferences-box">
+          <h3>Your discovery preferences</h3>
+
+          <div class="pref-row">
+            <div>
+              <label>I am a</label>
+              <select id="profile-gender">
+                <option value="Man">Man</option>
+                <option value="Woman">Woman</option>
+                <option value="Non-binary">Non-binary</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label>Show me</label>
+              <select id="profile-showme">
+                <option value="Everyone">Everyone</option>
+                <option value="Men">Men</option>
+                <option value="Women">Women</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="pref-row">
+            <div>
+              <label>Minimum age</label>
+              <input type="number" id="profile-minage" min="18" max="99" value="18" />
+            </div>
+            <div>
+              <label>Maximum age</label>
+              <input type="number" id="profile-maxage" min="18" max="99" value="29" />
+            </div>
+          </div>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="profile-visible" checked />
+            Show my profile in discovery
+          </label>
+        </div>
+
+        <label class="checkbox-label">
+          <input type="checkbox" id="profile-confirm" required />
+          I am 18 or older. This profile and photo are of me, and I agree to show them to other adult members when discovery is on.
+        </label>
+
+        <button type="submit" class="btn primary full">Save changes →</button>
+      </form>
+
+      <button id="logout-btn" class="btn secondary full" style="margin-top:1.5rem">Log out</button>
+    </section>
+  </div>
+
+  <!-- MATCH MODAL -->
+  <div id="match-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>It's a match! 🔥</h2>
+      <p id="match-name"></p>
+      <button id="close-match" class="btn primary">Keep swiping</button>
+    </div>
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
