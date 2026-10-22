@@ -1,10 +1,10 @@
 // ============================================================
-// SCHLINDER – Main App Logic
+// SCHLINDER v2 – Discover, Matches, Chat, Fake profiles
 // ============================================================
 
-// ---------- DOM refs ----------
 const authScreen = document.getElementById('auth-screen');
 const appScreen = document.getElementById('app-screen');
+const chatScreen = document.getElementById('chat-screen');
 const loginForm = document.getElementById('login-form');
 const signupForm = document.getElementById('signup-form');
 const authError = document.getElementById('auth-error');
@@ -23,14 +23,12 @@ const matchesList = document.getElementById('matches-list');
 const noMatches = document.getElementById('no-matches');
 const matchModal = document.getElementById('match-modal');
 
-// Profile form
-const profileForm = document.getElementById('profile-form');
 const photoInput = document.getElementById('photo-input');
 const profilePhoto = document.getElementById('profile-photo');
 const photoPlaceholder = document.getElementById('photo-placeholder');
 const aboutCount = document.getElementById('about-count');
+const profileForm = document.getElementById('profile-form');
 
-// State
 let currentUser = null;
 let userProfile = null;
 let discoverQueue = [];
@@ -38,6 +36,41 @@ let currentCardIndex = 0;
 let isDragging = false;
 let startX = 0;
 let currentX = 0;
+let activeChatId = null; // other user's uid
+let activeChatName = '';
+let chatUnsub = null;
+let lastMatchTarget = null;
+
+// Colored placeholder avatars (no external deps)
+const AVATAR_COLORS = ['#ff6b81', '#7c3aed', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#6366f1', '#14b8a6'];
+function avatarDataUrl(name, color) {
+  const initial = (name || '?').charAt(0).toUpperCase();
+  const c = color || AVATAR_COLORS[Math.abs(hashCode(name || '')) % AVATAR_COLORS.length];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect fill="${c}" width="400" height="400"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="160" font-family="system-ui,sans-serif" font-weight="700">${initial}</text></svg>`;
+  return 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+function hashCode(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0;
+  return h;
+}
+
+// ---------- FAKE PROFILE TEMPLATES ----------
+const FAKE_TEMPLATES = [
+  { name: 'Maya', gender: 'Woman', city: 'WELOCK', age: 16, about: 'Always down for iced coffee runs and late-night playlists ☕', interests: 'Music, Food, Movies', lookingFor: 'Friends' },
+  { name: 'Jordan', gender: 'Man', city: 'BARHEN', age: 17, about: 'Gamer by night, gym sometimes. Looking for people who get the jokes.', interests: 'Gaming, Memes, Sports', lookingFor: 'Hangouts' },
+  { name: 'Ava', gender: 'Woman', city: 'WELOCK', age: 15, about: 'Art kid. Sketching, Pinterest boards, and chaos.', interests: 'Art, Music, Memes', lookingFor: 'Friends' },
+  { name: 'Leo', gender: 'Man', city: 'BARHEN', age: 18, about: 'Soccer, coding, and bad movies. Take your pick.', interests: 'Sports, Coding, Movies', lookingFor: 'Friends' },
+  { name: 'Sam', gender: 'Non-binary', city: 'WELOCK', age: 16, about: 'Quiet until you get me talking about music or food trucks.', interests: 'Music, Food, Art', lookingFor: 'Hangouts' },
+  { name: 'Zoe', gender: 'Woman', city: 'BARHEN', age: 17, about: 'Drama club + matcha addiction. Hmu if you like spontaneous plans.', interests: 'Movies, Food, Music', lookingFor: 'Friends' },
+  { name: 'Noah', gender: 'Man', city: 'WELOCK', age: 15, about: 'Bikes, basketball, and trying not to fail math.', interests: 'Sports, Gaming, Memes', lookingFor: 'Hangouts' },
+  { name: 'Riley', gender: 'Woman', city: 'BARHEN', age: 16, about: 'Bookworm who also games. Soft chaos energy.', interests: 'Movies, Gaming, Art', lookingFor: 'Friends' }
+];
+
+function ageToDob(age) {
+  const y = new Date().getFullYear() - age;
+  return `${y}-06-15`;
+}
 
 // ============================================================
 // AUTH
@@ -49,7 +82,6 @@ document.getElementById('show-signup').addEventListener('click', (e) => {
   signupForm.classList.remove('hidden');
   authError.textContent = '';
 });
-
 document.getElementById('show-login').addEventListener('click', (e) => {
   e.preventDefault();
   signupForm.classList.add('hidden');
@@ -60,10 +92,7 @@ document.getElementById('show-login').addEventListener('click', (e) => {
 document.getElementById('login-btn').addEventListener('click', async () => {
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
-  if (!email || !password) {
-    authError.textContent = 'Please fill in all fields';
-    return;
-  }
+  if (!email || !password) { authError.textContent = 'Please fill in all fields'; return; }
   try {
     authError.textContent = 'Logging in...';
     await auth.signInWithEmailAndPassword(email, password);
@@ -76,35 +105,16 @@ document.getElementById('signup-btn').addEventListener('click', async () => {
   const name = document.getElementById('signup-name').value.trim();
   const email = document.getElementById('signup-email').value.trim();
   const password = document.getElementById('signup-password').value;
-  if (!name || !email || !password) {
-    authError.textContent = 'Please fill in all fields';
-    return;
-  }
-  if (password.length < 6) {
-    authError.textContent = 'Password must be at least 6 characters';
-    return;
-  }
+  if (!name || !email || !password) { authError.textContent = 'Please fill in all fields'; return; }
+  if (password.length < 6) { authError.textContent = 'Password must be at least 6 characters'; return; }
   try {
     authError.textContent = 'Creating account...';
     const cred = await auth.createUserWithEmailAndPassword(email, password);
-    // Create initial profile
     await db.collection('users').doc(cred.user.uid).set({
-      name,
-      email,
-      dob: '',
-      city: '',
-      about: '',
-      interests: '',
-      lookingFor: 'Friends',
-      gender: 'Man',
-      showMe: 'Everyone',
-      minAge: 15,
-      maxAge: 25,
-      visible: true,
-      photoURL: '',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      likes: [],
-      matches: []
+      name, email, dob: '', city: '', about: '', interests: '', lookingFor: 'Friends',
+      gender: 'Man', showMe: 'Everyone', minAge: 15, maxAge: 25, visible: true,
+      photoURL: '', isFake: false, likes: [], matches: [],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   } catch (err) {
     authError.textContent = err.message.replace('Firebase: ', '');
@@ -112,18 +122,17 @@ document.getElementById('signup-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('logout-btn').addEventListener('click', () => {
+  if (chatUnsub) { chatUnsub(); chatUnsub = null; }
   auth.signOut();
 });
 
-// Auth state listener
 auth.onAuthStateChanged(async (user) => {
   if (user) {
     currentUser = user;
     authScreen.classList.add('hidden');
+    chatScreen.classList.add('hidden');
     appScreen.classList.remove('hidden');
     await loadUserProfile();
-
-    // Force new users to finish their profile first
     if (!isProfileComplete(userProfile)) {
       switchToTab('profile');
       showToast('Finish setting up your profile to start matching!');
@@ -135,13 +144,13 @@ auth.onAuthStateChanged(async (user) => {
     currentUser = null;
     userProfile = null;
     appScreen.classList.add('hidden');
+    chatScreen.classList.add('hidden');
     authScreen.classList.remove('hidden');
   }
 });
 
 function isProfileComplete(p) {
-  if (!p) return false;
-  return !!(p.name && p.dob && p.city);
+  return !!(p && p.name && p.dob && p.city);
 }
 
 function switchToTab(target) {
@@ -152,23 +161,15 @@ function switchToTab(target) {
   if (tabContents[target]) tabContents[target].classList.remove('hidden');
 }
 
-// ============================================================
-// TABS
-// ============================================================
-
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
     const target = tab.dataset.tab;
-
-    // Block Discover & Matches until profile is complete
     if ((target === 'discover' || target === 'matches') && !isProfileComplete(userProfile)) {
       showToast('Please finish your profile first');
       switchToTab('profile');
       return;
     }
-
     switchToTab(target);
-
     if (target === 'matches') loadMatches();
     if (target === 'discover') loadDiscover();
   });
@@ -184,31 +185,12 @@ async function loadUserProfile() {
   if (doc.exists) {
     userProfile = doc.data();
   } else {
-    // Account exists in Auth but no Firestore doc yet — create one
     userProfile = {
-      name: currentUser.displayName || '',
-      email: currentUser.email || '',
-      dob: '',
-      city: '',
-      about: '',
-      interests: '',
-      lookingFor: 'Friends',
-      lookingFor: 'Friends',
-      gender: 'Man',
-      showMe: 'Everyone',
-      minAge: 15,
-      maxAge: 25,
-      visible: true,
-      photoURL: '',
-      likes: [],
-      matches: [],
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      name: '', email: currentUser.email || '', dob: '', city: '', about: '', interests: '',
+      lookingFor: 'Friends', gender: 'Man', showMe: 'Everyone', minAge: 15, maxAge: 25,
+      visible: true, photoURL: '', isFake: false, likes: [], matches: []
     };
-    try {
-      await ref.set(userProfile);
-    } catch (e) {
-      console.error('Could not create profile doc', e);
-    }
+    try { await ref.set(userProfile); } catch (e) { console.error(e); }
   }
   fillProfileForm(userProfile);
 }
@@ -217,11 +199,8 @@ function fillProfileForm(p) {
   document.getElementById('profile-name').value = p.name || '';
   document.getElementById('profile-dob').value = p.dob || '';
   const citySelect = document.getElementById('profile-city');
-  if (p.city === 'WELOCK' || p.city === 'BARHEN') {
-    citySelect.value = p.city;
-  } else {
-    citySelect.selectedIndex = 0;
-  }
+  if (p.city === 'WELOCK' || p.city === 'BARHEN') citySelect.value = p.city;
+  else citySelect.selectedIndex = 0;
   document.getElementById('profile-about').value = p.about || '';
   aboutCount.textContent = (p.about || '').length;
   document.getElementById('profile-interests').value = p.interests || '';
@@ -232,7 +211,6 @@ function fillProfileForm(p) {
   document.getElementById('profile-minage').value = p.minAge || 15;
   document.getElementById('profile-maxage').value = p.maxAge || 25;
   document.getElementById('profile-visible').checked = p.visible !== false;
-
   if (p.photoURL) {
     profilePhoto.src = p.photoURL;
     profilePhoto.classList.remove('hidden');
@@ -247,7 +225,6 @@ document.getElementById('profile-about').addEventListener('input', (e) => {
   aboutCount.textContent = e.target.value.length;
 });
 
-// Compress image to base64 so we don't need Firebase Storage (free Spark plan)
 function compressImage(file, maxWidth = 600, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -255,16 +232,10 @@ function compressImage(file, maxWidth = 600, quality = 0.7) {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        let w = img.width;
-        let h = img.height;
-        if (w > maxWidth) {
-          h = Math.round((h * maxWidth) / w);
-          w = maxWidth;
-        }
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = Math.round((h * maxWidth) / w); w = maxWidth; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
         resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.onerror = reject;
@@ -278,18 +249,11 @@ function compressImage(file, maxWidth = 600, quality = 0.7) {
 photoInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  if (file.size > 8 * 1024 * 1024) {
-    showToast('Photo must be under 8 MB');
-    return;
-  }
+  if (file.size > 8 * 1024 * 1024) { showToast('Photo must be under 8 MB'); return; }
   try {
     showToast('Saving photo...');
     const dataUrl = await compressImage(file);
-    // Keep under Firestore 1MB doc limit
-    if (dataUrl.length > 900000) {
-      showToast('Photo still too large — try a smaller one');
-      return;
-    }
+    if (dataUrl.length > 900000) { showToast('Photo still too large — try a smaller one'); return; }
     profilePhoto.src = dataUrl;
     profilePhoto.classList.remove('hidden');
     photoPlaceholder.classList.add('hidden');
@@ -316,14 +280,11 @@ profileForm.addEventListener('submit', async (e) => {
     maxAge: parseInt(document.getElementById('profile-maxage').value) || 25,
     visible: document.getElementById('profile-visible').checked
   };
-
   if (!data.name || !data.dob || !data.city) {
     showToast('Please fill in name, date of birth, and city');
     return;
   }
-
   try {
-    // set + merge creates the doc if it doesn't exist (fixes "No document to update")
     await db.collection('users').doc(currentUser.uid).set(data, { merge: true });
     userProfile = { ...userProfile, ...data };
     showToast('Profile saved! You can now start matching 🔥');
@@ -334,49 +295,102 @@ profileForm.addEventListener('submit', async (e) => {
   }
 });
 
+document.getElementById('interest-chips')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.chip');
+  if (!btn) return;
+  e.preventDefault();
+  const interest = btn.dataset.interest;
+  const input = document.getElementById('profile-interests');
+  let list = (input.value || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (list.includes(interest)) {
+    list = list.filter(i => i !== interest);
+    btn.classList.remove('active');
+  } else if (list.length < 6) {
+    list.push(interest);
+    btn.classList.add('active');
+  } else {
+    showToast('Max 6 interests');
+    return;
+  }
+  input.value = list.join(', ');
+});
+
+// ============================================================
+// FAKE PROFILES
+// ============================================================
+
+async function createFakeProfile(data) {
+  const id = 'fake_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  const photoURL = avatarDataUrl(data.name);
+  await db.collection('users').doc(id).set({
+    name: data.name,
+    email: '',
+    dob: ageToDob(data.age || 17),
+    city: data.city || 'WELOCK',
+    about: data.about || '',
+    interests: data.interests || '',
+    lookingFor: data.lookingFor || 'Friends',
+    gender: data.gender || 'Woman',
+    showMe: 'Everyone',
+    minAge: 13,
+    maxAge: 99,
+    visible: true,
+    photoURL,
+    isFake: true,
+    likes: [],
+    matches: [],
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  return id;
+}
+
+async function seedFakeProfiles() {
+  showToast('Adding fake profiles...');
+  try {
+    for (const t of FAKE_TEMPLATES) {
+      await createFakeProfile(t);
+    }
+    showToast('Added 8 fake profiles! Check Discover 🔥');
+    loadDiscover();
+  } catch (err) {
+    showToast('Failed: ' + err.message);
+  }
+}
+
+document.getElementById('seed-fake-btn')?.addEventListener('click', seedFakeProfiles);
+document.getElementById('seed-fakes-profile-btn')?.addEventListener('click', seedFakeProfiles);
+
+document.getElementById('open-create-fake')?.addEventListener('click', () => {
+  document.getElementById('fake-modal').classList.remove('hidden');
+});
+document.getElementById('close-fake')?.addEventListener('click', () => {
+  document.getElementById('fake-modal').classList.add('hidden');
+});
+
+document.getElementById('create-fake-btn')?.addEventListener('click', async () => {
+  const name = document.getElementById('fake-name').value.trim();
+  if (!name) { showToast('Name required'); return; }
+  try {
+    await createFakeProfile({
+      name,
+      city: document.getElementById('fake-city').value,
+      gender: document.getElementById('fake-gender').value,
+      age: parseInt(document.getElementById('fake-age').value) || 17,
+      about: document.getElementById('fake-about').value.trim(),
+      interests: document.getElementById('fake-interests').value.trim(),
+      lookingFor: document.getElementById('fake-looking').value
+    });
+    document.getElementById('fake-modal').classList.add('hidden');
+    showToast(`Created ${name}! They're in Discover now`);
+    loadDiscover();
+  } catch (err) {
+    showToast('Error: ' + err.message);
+  }
+});
+
 // ============================================================
 // DISCOVER
 // ============================================================
-
-async function loadDiscover() {
-  if (!userProfile) return;
-
-  cardStack.innerHTML = '<div class="spinner"></div>';
-  noMoreCards.classList.add('hidden');
-  swipeActions.classList.add('hidden');
-
-  try {
-    // Simple query: get other users who are visible
-    // (In production you'd add better filtering by age/gender/location)
-    const snapshot = await db.collection('users')
-      .where('visible', '==', true)
-      .limit(30)
-      .get();
-
-    const myLikes = userProfile.likes || [];
-    const myMatches = userProfile.matches || [];
-
-    discoverQueue = [];
-    snapshot.forEach(doc => {
-      if (doc.id === currentUser.uid) return;
-      if (myLikes.includes(doc.id) || myMatches.includes(doc.id)) return;
-      const data = doc.data();
-      // Basic age filter
-      const age = calcAge(data.dob);
-      if (age && (age < (userProfile.minAge || 18) || age > (userProfile.maxAge || 99))) return;
-      discoverQueue.push({ id: doc.id, ...data });
-    });
-
-    // Shuffle a bit
-    discoverQueue = discoverQueue.sort(() => Math.random() - 0.5);
-    currentCardIndex = 0;
-    renderCurrentCard();
-  } catch (err) {
-    console.error(err);
-    cardStack.innerHTML = '';
-    noMoreCards.classList.remove('hidden');
-  }
-}
 
 function calcAge(dob) {
   if (!dob) return null;
@@ -388,6 +402,36 @@ function calcAge(dob) {
   return age;
 }
 
+async function loadDiscover() {
+  if (!userProfile) return;
+  cardStack.innerHTML = '<div class="spinner"></div>';
+  noMoreCards.classList.add('hidden');
+  swipeActions.classList.add('hidden');
+
+  try {
+    const snapshot = await db.collection('users').where('visible', '==', true).limit(50).get();
+    const myLikes = userProfile.likes || [];
+    const myMatches = userProfile.matches || [];
+
+    discoverQueue = [];
+    snapshot.forEach(doc => {
+      if (doc.id === currentUser.uid) return;
+      if (myLikes.includes(doc.id) || myMatches.includes(doc.id)) return;
+      const data = doc.data();
+      const age = calcAge(data.dob);
+      if (age != null && (age < (userProfile.minAge || 13) || age > (userProfile.maxAge || 99))) return;
+      discoverQueue.push({ id: doc.id, ...data });
+    });
+    discoverQueue = discoverQueue.sort(() => Math.random() - 0.5);
+    currentCardIndex = 0;
+    renderCurrentCard();
+  } catch (err) {
+    console.error(err);
+    cardStack.innerHTML = '';
+    noMoreCards.classList.remove('hidden');
+  }
+}
+
 function renderCurrentCard() {
   cardStack.innerHTML = '';
   if (currentCardIndex >= discoverQueue.length) {
@@ -395,29 +439,27 @@ function renderCurrentCard() {
     swipeActions.classList.add('hidden');
     return;
   }
-
   noMoreCards.classList.add('hidden');
   swipeActions.classList.remove('hidden');
 
   const p = discoverQueue[currentCardIndex];
   const age = calcAge(p.dob);
   const interests = (p.interests || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 6);
+  const photo = p.photoURL || avatarDataUrl(p.name);
 
   const card = document.createElement('div');
   card.className = 'profile-card';
   card.innerHTML = `
-    <img src="${p.photoURL || 'https://via.placeholder.com/400x400?text=No+Photo'}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/400x400?text=No+Photo'" />
+    <img src="${photo}" alt="${p.name || ''}" />
     <div class="card-info">
       <h3>${p.name || 'Anonymous'}${age ? ', ' + age : ''}</h3>
-      <p class="age-city">${p.city || ''}</p>
+      <p class="age-city">${p.city || ''}${p.lookingFor ? ' · ' + p.lookingFor : ''}</p>
       <p class="about">${p.about || ''}</p>
       <div class="interests">
         ${interests.map(i => `<span class="interest-tag">${i}</span>`).join('')}
       </div>
     </div>
   `;
-
-  // Swipe gestures
   card.addEventListener('touchstart', onDragStart, { passive: true });
   card.addEventListener('mousedown', onDragStart);
   card.addEventListener('touchmove', onDragMove, { passive: false });
@@ -425,7 +467,6 @@ function renderCurrentCard() {
   card.addEventListener('touchend', onDragEnd);
   card.addEventListener('mouseup', onDragEnd);
   card.addEventListener('mouseleave', onDragEnd);
-
   cardStack.appendChild(card);
 }
 
@@ -433,10 +474,8 @@ function onDragStart(e) {
   isDragging = true;
   startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
   currentX = startX;
-  const card = cardStack.querySelector('.profile-card');
-  if (card) card.classList.add('swiping');
+  cardStack.querySelector('.profile-card')?.classList.add('swiping');
 }
-
 function onDragMove(e) {
   if (!isDragging) return;
   e.preventDefault();
@@ -448,21 +487,17 @@ function onDragMove(e) {
     card.style.opacity = 1 - Math.abs(delta) / 400;
   }
 }
-
 function onDragEnd() {
   if (!isDragging) return;
   isDragging = false;
   const delta = currentX - startX;
   const card = cardStack.querySelector('.profile-card');
   if (!card) return;
-
   if (delta > 100) {
-    // Like
     card.style.transform = 'translateX(120%) rotate(15deg)';
     card.style.opacity = '0';
     setTimeout(() => handleSwipe(true), 250);
   } else if (delta < -100) {
-    // Dislike
     card.style.transform = 'translateX(-120%) rotate(-15deg)';
     card.style.opacity = '0';
     setTimeout(() => handleSwipe(false), 250);
@@ -481,7 +516,6 @@ document.getElementById('like-btn').addEventListener('click', () => {
     setTimeout(() => handleSwipe(true), 250);
   }
 });
-
 document.getElementById('dislike-btn').addEventListener('click', () => {
   const card = cardStack.querySelector('.profile-card');
   if (card) {
@@ -490,17 +524,14 @@ document.getElementById('dislike-btn').addEventListener('click', () => {
     setTimeout(() => handleSwipe(false), 250);
   }
 });
-
 document.getElementById('check-again-btn').addEventListener('click', loadDiscover);
 
 async function handleSwipe(liked) {
   const target = discoverQueue[currentCardIndex];
   if (!target) return;
-
   currentCardIndex++;
 
   if (liked) {
-    // Add to my likes
     const myLikes = userProfile.likes || [];
     if (!myLikes.includes(target.id)) {
       myLikes.push(target.id);
@@ -508,36 +539,49 @@ async function handleSwipe(liked) {
       userProfile.likes = myLikes;
     }
 
-    // Check if they already liked me → match!
-    const theirDoc = await db.collection('users').doc(target.id).get();
-    const theirData = theirDoc.data() || {};
-    const theirLikes = theirData.likes || [];
+    // Fake profiles auto-like back so you can demo matches + chat
+    let theirLikes = [];
+    if (target.isFake) {
+      theirLikes = [currentUser.uid];
+      await db.collection('users').doc(target.id).set({ likes: theirLikes }, { merge: true });
+    } else {
+      const theirDoc = await db.collection('users').doc(target.id).get();
+      theirLikes = (theirDoc.data() || {}).likes || [];
+    }
 
     if (theirLikes.includes(currentUser.uid)) {
-      // It's a match!
       const myMatches = userProfile.matches || [];
       if (!myMatches.includes(target.id)) {
         myMatches.push(target.id);
         await db.collection('users').doc(currentUser.uid).set({ matches: myMatches }, { merge: true });
         userProfile.matches = myMatches;
       }
-      const theirMatches = theirData.matches || [];
-      if (!theirMatches.includes(currentUser.uid)) {
-        theirMatches.push(currentUser.uid);
-        await db.collection('users').doc(target.id).set({ matches: theirMatches }, { merge: true });
+      if (!target.isFake) {
+        const theirDoc = await db.collection('users').doc(target.id).get();
+        const theirMatches = (theirDoc.data() || {}).matches || [];
+        if (!theirMatches.includes(currentUser.uid)) {
+          theirMatches.push(currentUser.uid);
+          await db.collection('users').doc(target.id).set({ matches: theirMatches }, { merge: true });
+        }
+      } else {
+        await db.collection('users').doc(target.id).set({ matches: [currentUser.uid] }, { merge: true });
       }
-      // Show match modal + confetti
+
+      lastMatchTarget = target;
       document.getElementById('match-name').textContent = `You and ${target.name} liked each other!`;
       matchModal.classList.remove('hidden');
       burstConfetti();
     }
   }
-
   renderCurrentCard();
 }
 
 document.getElementById('close-match').addEventListener('click', () => {
   matchModal.classList.add('hidden');
+});
+document.getElementById('match-message-btn')?.addEventListener('click', () => {
+  matchModal.classList.add('hidden');
+  if (lastMatchTarget) openChat(lastMatchTarget.id, lastMatchTarget.name, lastMatchTarget.photoURL, lastMatchTarget.city);
 });
 
 function burstConfetti() {
@@ -557,8 +601,12 @@ function burstConfetti() {
 }
 
 // ============================================================
-// MATCHES
+// MATCHES + CHAT
 // ============================================================
+
+function chatIdFor(uidA, uidB) {
+  return [uidA, uidB].sort().join('_');
+}
 
 async function loadMatches() {
   matchesList.innerHTML = '';
@@ -567,18 +615,11 @@ async function loadMatches() {
 
   if (matchIds.length === 0) {
     noMatches.classList.remove('hidden');
-    if (badge) {
-      badge.classList.add('hidden');
-      badge.textContent = '0';
-    }
+    if (badge) { badge.classList.add('hidden'); badge.textContent = '0'; }
     return;
   }
-
   noMatches.classList.add('hidden');
-  if (badge) {
-    badge.textContent = matchIds.length;
-    badge.classList.remove('hidden');
-  }
+  if (badge) { badge.textContent = matchIds.length; badge.classList.remove('hidden'); }
 
   for (const id of matchIds) {
     try {
@@ -586,52 +627,116 @@ async function loadMatches() {
       if (!doc.exists) continue;
       const p = doc.data();
       const age = calcAge(p.dob);
+      const photo = p.photoURL || avatarDataUrl(p.name);
+
+      // Last message preview
+      let preview = p.city || 'Say hello!';
+      try {
+        const cid = chatIdFor(currentUser.uid, id);
+        const msgs = await db.collection('chats').doc(cid).collection('messages')
+          .orderBy('createdAt', 'desc').limit(1).get();
+        if (!msgs.empty) {
+          const m = msgs.docs[0].data();
+          preview = (m.from === currentUser.uid ? 'You: ' : '') + (m.text || '').slice(0, 40);
+        }
+      } catch (_) {}
 
       const item = document.createElement('div');
       item.className = 'match-item';
       item.innerHTML = `
-        <img src="${p.photoURL || 'https://via.placeholder.com/100?text=?'}" alt="" onerror="this.src='https://via.placeholder.com/100?text=?'" />
+        <img src="${photo}" alt="" />
         <div class="match-info">
           <h4>${p.name || 'Someone'}${age ? ', ' + age : ''}</h4>
-          <p>${p.city || 'Say hello!'}</p>
+          <p>${preview}</p>
         </div>
-        <button class="say-hi-btn" data-name="${(p.name || 'them').replace(/"/g, '')}" data-id="${id}">Say hi 👋</button>
+        <button class="say-hi-btn">Chat</button>
       `;
+      item.addEventListener('click', () => openChat(id, p.name, photo, p.city));
       matchesList.appendChild(item);
     } catch (e) {
       console.error(e);
     }
   }
+}
 
-  // Wire up Say hi buttons
-  matchesList.querySelectorAll('.say-hi-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openMessageModal(btn.dataset.name, btn.dataset.id);
+function openChat(otherId, name, photo, city) {
+  activeChatId = otherId;
+  activeChatName = name || 'Chat';
+  appScreen.classList.add('hidden');
+  chatScreen.classList.remove('hidden');
+  document.getElementById('chat-name').textContent = name || 'Chat';
+  document.getElementById('chat-city').textContent = city || '';
+  document.getElementById('chat-avatar').src = photo || avatarDataUrl(name);
+  document.getElementById('chat-messages').innerHTML = '<div class="spinner"></div>';
+  document.getElementById('chat-input').value = '';
+
+  if (chatUnsub) { chatUnsub(); chatUnsub = null; }
+
+  const cid = chatIdFor(currentUser.uid, otherId);
+  chatUnsub = db.collection('chats').doc(cid).collection('messages')
+    .orderBy('createdAt', 'asc')
+    .onSnapshot((snap) => {
+      const box = document.getElementById('chat-messages');
+      box.innerHTML = '';
+      if (snap.empty) {
+        box.innerHTML = '<p style="text-align:center;color:#6b7280;padding:2rem;font-size:0.9rem">Say hi 👋</p>';
+      }
+      snap.forEach(doc => {
+        const m = doc.data();
+        const div = document.createElement('div');
+        div.className = 'msg ' + (m.from === currentUser.uid ? 'mine' : 'theirs');
+        let time = '';
+        if (m.createdAt && m.createdAt.toDate) {
+          time = m.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        div.innerHTML = `${escapeHtml(m.text || '')}<span class="msg-time">${time}</span>`;
+        box.appendChild(div);
+      });
+      box.scrollTop = box.scrollHeight;
+    }, (err) => {
+      console.error(err);
+      showToast('Chat error: ' + err.message);
     });
-  });
 }
 
-function openMessageModal(name, id) {
-  document.getElementById('message-to-name').textContent = `To ${name}`;
-  document.getElementById('message-text').value = '';
-  document.getElementById('message-modal').dataset.targetId = id;
-  document.getElementById('message-modal').classList.remove('hidden');
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-document.getElementById('close-message').addEventListener('click', () => {
-  document.getElementById('message-modal').classList.add('hidden');
+document.getElementById('chat-back').addEventListener('click', () => {
+  if (chatUnsub) { chatUnsub(); chatUnsub = null; }
+  activeChatId = null;
+  chatScreen.classList.add('hidden');
+  appScreen.classList.remove('hidden');
+  switchToTab('matches');
+  loadMatches();
 });
 
-document.getElementById('send-message-btn').addEventListener('click', () => {
-  const text = document.getElementById('message-text').value.trim();
-  if (!text) {
-    showToast('Type a message first');
-    return;
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || !activeChatId) return;
+  input.value = '';
+  const cid = chatIdFor(currentUser.uid, activeChatId);
+  try {
+    await db.collection('chats').doc(cid).set({
+      users: [currentUser.uid, activeChatId],
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    await db.collection('chats').doc(cid).collection('messages').add({
+      from: currentUser.uid,
+      text,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err) {
+    showToast('Could not send: ' + err.message);
+    input.value = text;
   }
-  // Simple local "sent" for now (no real chat backend yet)
-  document.getElementById('message-modal').classList.add('hidden');
-  showToast('Message sent! 🔥');
+}
+
+document.getElementById('chat-send').addEventListener('click', sendChatMessage);
+document.getElementById('chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); }
 });
 
 // ============================================================
@@ -647,31 +752,9 @@ function showToast(msg) {
   }
   toast.textContent = msg;
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2500);
+  setTimeout(() => toast.classList.remove('show'), 2800);
 }
 
-// Prevent default drag behavior on images
 document.addEventListener('dragstart', (e) => {
   if (e.target.tagName === 'IMG') e.preventDefault();
-});
-
-// Interest quick-add chips
-document.getElementById('interest-chips')?.addEventListener('click', (e) => {
-  const btn = e.target.closest('.chip');
-  if (!btn) return;
-  e.preventDefault();
-  const interest = btn.dataset.interest;
-  const input = document.getElementById('profile-interests');
-  let list = (input.value || '').split(',').map(s => s.trim()).filter(Boolean);
-  if (list.includes(interest)) {
-    list = list.filter(i => i !== interest);
-    btn.classList.remove('active');
-  } else if (list.length < 6) {
-    list.push(interest);
-    btn.classList.add('active');
-  } else {
-    showToast('Max 6 interests');
-    return;
-  }
-  input.value = list.join(', ');
 });
